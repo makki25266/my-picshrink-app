@@ -4,24 +4,11 @@ import zipfile
 from PIL import Image
 import io
 
-# Page Config
+# Simple Page Title
 st.set_page_config(page_title="PicShrink AI", page_icon="🖼️", layout="centered")
 
-st.markdown("""
-    <style>
-    .title-text { font-family: 'Arial', sans-serif; color: #4A154B; font-weight: bold; text-align: center; }
-    .subtitle-text { color: #555555; text-align: center; margin-bottom: 25px; }
-    div.stButton > button:first-child {
-        background: linear-gradient(45deg, #FF416C, #FF4B2B);
-        color: white; border-radius: 20px; border: none;
-        padding: 12px 30px; font-size: 18px; font-weight: bold; width: 100%;
-        box-shadow: 0px 4px 15px rgba(255, 65, 108, 0.3);
-    }
-    </style>
-""", unsafe_allowed_html=True)
-
-st.markdown("<h1 class='title-text'>🖼️ PicShrink AI</h1>", unsafe_allowed_html=True)
-st.markdown("<p class='subtitle-text'>Smart Image Customizer, Background Changer & Bulk Compressor</p>", unsafe_allowed_html=True)
+st.title("🖼️ PicShrink AI")
+st.write("Bulk Image Resizer, Background Changer & Compressor")
 st.divider()
 
 # Sidebar Layout
@@ -86,7 +73,7 @@ if uploaded_file is not None:
                             else:
                                 current_img.save(img_byte_arr, format="JPEG", quality=85)
                             
-                            # 4. SECURE EXTENSION FIX
+                            # 4. Strict Extension Fix (.jpg append)
                             base_name = os.path.basename(file_name)
                             name_without_ext = os.path.splitext(base_name)[0]
                             
