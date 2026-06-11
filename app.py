@@ -4,11 +4,11 @@ import zipfile
 from PIL import Image
 import io
 
-# Simple Page Title
+# Page Config
 st.set_page_config(page_title="PicShrink AI", page_icon="🖼️", layout="centered")
 
 st.title("🖼️ PicShrink AI")
-st.write("Bulk Image Resizer, Background Changer & Compressor")
+st.caption("Bulk Image Resizer, Background Changer & Compressor")
 st.divider()
 
 # Sidebar Layout
@@ -73,7 +73,7 @@ if uploaded_file is not None:
                             else:
                                 current_img.save(img_byte_arr, format="JPEG", quality=85)
                             
-                            # 4. Strict Extension Fix (.jpg append)
+                            # 4. Strict Extension Fix
                             base_name = os.path.basename(file_name)
                             name_without_ext = os.path.splitext(base_name)[0]
                             
