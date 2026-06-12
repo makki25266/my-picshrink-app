@@ -1,172 +1,91 @@
-# Server Reset Trigger
-import streamlit as st
-import os
+
+
+                 import streamlit as st
 import zipfile
 from PIL import Image
 import io
-from rembg import remove
 
 # Page Config
-st.set_page_config(page_title="PicShrink AI", page_icon="🖼️", layout="centered")
+st.set_page_config(page_title="PicShrink Pro", page_icon="🖼️", layout="centered")
 
-st.title("🖼️ PicShrink AI")
-st.caption("AI-Powered Background Changer, Bulk ZIP & Single Image Processor")
-st.divider()
+st.title("🖼️ PicShrink Pro: Compress & Remove Background")
+st.write("Upload your images, remove backgrounds, compress sizes, and download them instantly!")
 
-# Sidebar Layout
-st.sidebar.header("⚙️ Settings Panel")
+# File Uploader
+uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-# 1. Dimensions Logic
-change_dim = st.sidebar.checkbox("📐 Resize Image Dimensions?", value=False)
-if change_dim:
-    width = st.sidebar.number_input("Width (Pixels)", value=600, step=50)
-    height = st.sidebar.number_input("Height (Pixels)", value=800, step=50)
-
-st.sidebar.divider()
-
-# 2. AI Background Customization Logic
-st.sidebar.write("🤖 **AI Background Options:**")
-bg_action = st.sidebar.radio(
-    "Choose Action:",
-    ["Keep Original Background", "Remove Background (Transparent)", "Solid Color Background", "Custom Background Image 🖼️"]
-)
-
-selected_color = None
-bg_image_file = None
-
-if bg_action == "Solid Color Background":
-    bg_color_choice = st.sidebar.selectbox("Choose Background Color", ["White", "Green", "Blue", "Black", "Red"])
-    color_map = {"White": (255, 255, 255), "Green": (0, 255, 0), "Blue": (0, 0, 255), "Black": (0, 0, 0), "Red": (255, 0, 0)}
-    selected_color = color_map[bg_color_choice]
-
-elif bg_action == "Custom Background Image 🖼️":
-    st.sidebar.info("📸 Upload your background image below:")
-    bg_image_file = st.sidebar.file_uploader("Upload Background", type=["jpg", "jpeg", "png"])
-
-st.sidebar.divider()
-
-# 3. Compression Logic
-apply_comp = st.sidebar.checkbox("📉 Strict File Size Limit (KB)?", value=True)
-if apply_comp:
-    max_kb = st.sidebar.number_input("Maximum Size (KB)", value=20, step=5)
-
-# Main Screen File Uploader (Accepts both ZIP and Normal Images)
-uploaded_file = st.file_uploader("📂 Apni photos wali ZIP file ya single photo yahan upload karein", type=["zip", "jpg", "jpeg", "png", "bmp"])
-
-# Helper function to process a single image object
-def process_single_image(img, file_name):
-    # A. AI Background Action
-    if bg_action == "Remove Background (Transparent)":
-        processed_img = remove(img)
-        ext = "png"
-    elif bg_action == "Solid Color Background":
-        no_bg_img = remove(img)
-        background = Image.new("RGBA", no_bg_img.size, selected_color + (255,))
-        processed_img = Image.alpha_composite(background, no_bg_img.convert("RGBA"))
-        ext = "jpg"
-    elif bg_action == "Custom Background Image 🖼️" and custom_bg is not None:
-        no_bg_img = remove(img)
-        resized_bg = custom_bg.resize(no_bg_img.size, Image.Resampling.LANCZOS)
-        processed_img = Image.alpha_composite(resized_bg, no_bg_img.convert("RGBA"))
-        ext = "jpg"
-    else:
-        processed_img = img.convert("RGB")
-        ext = "jpg"
-        
-    # B. Resize Logic
-    if change_dim:
-        processed_img = processed_img.resize((int(width), int(height)), Image.Resampling.LANCZOS)
-        
-    # C. Size Compression Logic
-    img_byte_arr = io.BytesIO()
-    save_format = "PNG" if ext == "png" else "JPEG"
+if uploaded_files:
+    # Settings
+    st.subheader("⚙️ Processing Settings")
+    remove_bg = st.checkbox("Remove Background (AI)")
+    quality = st.slider("Compression Quality (Lower = Smaller file size)", 10, 100, 80)
     
-    if apply_comp:
-        img_quality = 95
-        while img_quality > 10:
-            img_byte_arr = io.BytesIO()
-            if save_format == "JPEG":
-                processed_img.convert("RGB").save(img_byte_arr, format=save_format, quality=img_quality)
-            else:
-                processed_img.save(img_byte_arr, format=save_format, optimize=True)
-                break
-                
-            if img_byte_arr.tell() <= (max_kb * 1024):
-                break
-            img_quality -= 5
-    else:
-        if save_format == "JPEG":
-            processed_img.convert("RGB").save(img_byte_arr, format=save_format, quality=85)
-        else:
-            processed_img.save(img_byte_arr, format=save_format)
+    processed_images = []
+    
+    # Process Images Button
+    if st.button("🚀 Process Images"):
+        with st.spinner("Processing images... Please wait..."):
             
-    return img_byte_arr.getvalue(), ext
-
-if uploaded_file is not None:
-    st.success("File loaded successfully!")
-    
-    # Validation for Custom Background
-    if bg_action == "Custom Background Image 🖼️" and bg_image_file is None:
-        st.warning("⚠️ Please upload a custom background image from the sidebar first!")
-    else:
-        if st.button("🚀 Process Images"):
-            with st.spinner("AI is working... Processing your request..."):
+            # If user wants to remove background, load the library inside the process loop
+            if remove_bg:
+                from rembg import remove
+            
+            for uploaded_file in uploaded_files:
+                # Read image
+                img = Image.open(uploaded_file)
                 
-                # Load custom background if available
-                custom_bg = None
-                if bg_action == "Custom Background Image 🖼️" and bg_image_file is not None:
-                    custom_bg = Image.open(bg_image_file).convert("RGBA")
+                # Step 1: Remove Background if selected
+                if remove_bg:
+                    img = remove(img)
                 
-                is_zip = uploaded_file.name.lower().endswith('.zip')
-                
-                if is_zip:
-                    # ---- ZIP FILE PROCESSING ----
-                    input_zip = zipfile.ZipFile(uploaded_file)
-                    output_buffer = io.BytesIO()
-                    count = 0
-                    
-                    with zipfile.ZipFile(output_buffer, "w", zipfile.ZIP_DEFLATED) as out_zip:
-                        for file_name in input_zip.namelist():
-                            if file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.bmp')) and not file_name.startswith('__MACOSX'):
-                                try:
-                                    img_data = input_zip.read(file_name)
-                                    img = Image.open(io.BytesIO(img_data))
-                                    
-                                    file_bytes, final_ext = process_single_image(img, file_name)
-                                    
-                                    base_name = os.path.basename(file_name)
-                                    name_without_ext = os.path.splitext(base_name)[0]
-                                    
-                                    if name_without_ext:
-                                        out_zip.writestr(f"{name_without_ext}.{final_ext}", file_bytes)
-                                        count += 1
-                                except:
-                                    pass
-                    
-                    if count > 0:
-                        st.balloons()
-                        st.success(f"Mubarak ho Hafiz! Tamam {count} photos ready hain.")
-                        st.download_button(
-                            label="📥 Apni ready ZIP file yahan se download karein",
-                            data=output_buffer.getvalue(),
-                            file_name="PicShrink_Master_Output.zip",
-                            mime="application/zip"
-                        )
+                # Step 2: Convert to RGB for saving as JPEG if it's not transparent anymore
+                if img.mode in ('RGBA', 'LA') and not remove_bg:
+                    img = img.convert('RGB')
+                elif img.mode == 'RGBA' and remove_bg:
+                    # Keep RGBA mode to preserve transparency after background removal
+                    pass
                 else:
-                    # ---- SINGLE IMAGE PROCESSING ----
-                    try:
-                        img = Image.open(uploaded_file)
-                        file_bytes, final_ext = process_single_image(img, uploaded_file.name)
-                        
-                        name_without_ext = os.path.splitext(uploaded_file.name)[0]
-                        
-                        st.balloons()
-                        st.success("Mubarak ho Hafiz! Aap ki photo AI se process ho chuki hai.")
-                        st.download_button(
-                            label="📥 Apni ready photo yahan se download karein",
-                            data=file_bytes,
-                            file_name=f"{name_without_ext}_processed.{final_ext}",
-                            mime=f"image/{final_ext}"
-                        )
-                    except Exception as e:
-                        st.error(f"Image process karne mein koi masla aaya: {e}")
+                    img = img.convert('RGB')
+                
+                # Step 3: Compress image into memory
+                img_io = io.BytesIO()
+                if remove_bg:
+                    img.save(img_io, format="PNG")  # PNG preserves transparency
+                else:
+                    img.save(img_io, format="JPEG", quality=quality)
+                    
+                img_io.seek(0)
+                
+                processed_images.append({
+                    "name": uploaded_file.name,
+                    "data": img_io
+                })
+                
+        st.success("🎉 All images processed successfully!")
+        
+        # Download Section
+        if len(processed_images) == 1:
+            # Single file download
+            file = processed_images[0]
+            ext = ".png" if remove_bg else ".jpg"
+            st.download_button(
+                label="📥 Download Processed Image",
+                data=file["data"],
+                file_name=file["name"].split('.')[0] + "_processed" + ext,
+                mime="image/png" if remove_bg else "image/jpeg"
+            )
+        elif len(processed_images) > 1:
+            # ZIP download for multiple files
+            zip_io = io.BytesIO()
+            with zipfile.ZipFile(zip_io, 'w') as zip_file:
+                for file in processed_images:
+                    ext = ".png" if remove_bg else ".jpg"
+                    zip_file.writestr(file["name"].split('.')[0] + "_processed" + ext, file["data"].getvalue())
+            
+            zip_io.seek(0)
+            st.download_button(
+                label="📥 Download All as ZIP",
+                data=zip_io,
+                file_name="processed_images.zip",
+                mime="application/zip"
+            )      
