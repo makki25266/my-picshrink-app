@@ -1,3 +1,4 @@
+
 import streamlit as st
 import zipfile
 from PIL import Image
@@ -6,8 +7,8 @@ import io
 # Page Config
 st.set_page_config(page_title="PicShrink Pro", page_icon="🖼️", layout="centered")
 
-st.title("🖼️ PicShrink Pro: Compress & Ultimate BG Editor")
-st.write("Upload your images, remove backgrounds, select custom sizes, and set beautiful backgrounds instantly!")
+st.title("🖼️ PicShrink Pro: Target KB Compressor & BG Editor")
+st.write("Upload your images, set your exact desired KB size, and let the AI handle the rest!")
 
 # File Uploader
 uploaded_files = st.file_uploader("Choose images...", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
@@ -17,11 +18,11 @@ if uploaded_files:
     
     # 1. Size Selection Options
     st.markdown("#### 📏 Size Selection")
-    resize_option = st.radio("Choose Resize Method:", ["Original Size", "Custom Size (Pixels)"])
+    resize_option = st.radio("Choose Resize Method:", ["Original Dimensions", "Custom Dimensions (Pixels)"])
     
     custom_width = 800
     custom_height = 600
-    if resize_option == "Custom Size (Pixels)":
+    if resize_option == "Custom Dimensions (Pixels)":
         col1, col2 = st.columns(2)
         with col1:
             custom_width = st.number_input("Width (Pixels)", min_value=10, max_value=5000, value=800)
@@ -44,64 +45,82 @@ if uploaded_files:
         elif bg_mode == "Custom Background Image":
             custom_bg_file = st.file_uploader("📤 Upload Background Image (JPG/PNG)", type=["jpg", "jpeg", "png"], key="bg_img_upload")
 
-    # 3. Compression Settings
-    st.markdown("#### 📉 Compression Settings")
-    quality = st.slider("Compression Quality (Lower = Smaller file size)", 10, 100, 80)
+    # 3. Smart KB Compression Settings
+    st.markdown("#### 📉 Target File Size (KB)")
+    target_kb = st.number_input("Enter Maximum File Size (KB) you want:", min_value=5, max_value=10000, value=50, step=5)
     
     processed_images = []
     
     # Process Images Button
     if st.button("🚀 Process Images"):
-        with st.spinner("Processing images... Please wait..."):
+        with st.spinner("Processing images to match your target KB... Please wait..."):
             
             # Load library dynamically inside the loop to avoid server freeze
             if remove_bg:
                 from rembg import remove
             
+            st.markdown("### 📊 Compression Results:")
+            
             for uploaded_file in uploaded_files:
+                # Calculate Original Size in KB
+                uploaded_file.seek(0, io.SEEK_END)
+                orig_size_kb = uploaded_file.tell() / 1024
+                uploaded_file.seek(0)
+                
                 # Read image
                 img = Image.open(uploaded_file)
                 
                 # Step 1: Remove Background if selected
                 if remove_bg:
-                    img = remove(img)  # Returns an RGBA image with transparency
+                    img = remove(img)
                     
-                    # Apply solid color background if selected
                     if bg_mode == "Solid Color":
-                        # Create a solid color background image matching the current image size
                         bg_img = Image.new("RGBA", img.size, bg_color)
                         bg_img.paste(img, (0, 0), img)
                         img = bg_img
                         
-                    # Apply custom background image if uploaded
                     elif bg_mode == "Custom Background Image" and custom_bg_file is not None:
                         custom_bg = Image.open(custom_bg_file).convert("RGBA")
-                        # Resize custom background to match the main image size
                         custom_bg = custom_bg.resize(img.size, Image.Resampling.LANCZOS)
                         custom_bg.paste(img, (0, 0), img)
                         img = custom_bg
                 
-                # Step 2: Custom Size Selection
-                if resize_option == "Custom Size (Pixels)":
+                # Step 2: Custom Dimensions
+                if resize_option == "Custom Dimensions (Pixels)":
                     img = img.resize((custom_width, custom_height), Image.Resampling.LANCZOS)
                 
-                # Step 3: Handle Transparency Modes and Formats
-                img_io = io.BytesIO()
+                # Step 3: Smart Loop to hit the exact Target KB
+                ext = ".png" if (remove_bg and bg_mode == "Transparent") else ".jpg"
+                mime_type = "image/png" if ext == ".png" else "image/jpeg"
                 
-                # If background is transparent, save as PNG to keep it transparent
-                if remove_bg and bg_mode == "Transparent":
+                # If PNG (Transparent), standard compression is limited, so we save directly
+                if ext == ".png":
+                    img_io = io.BytesIO()
                     img.save(img_io, format="PNG")
-                    ext = ".png"
-                    mime_type = "image/png"
+                    new_size_kb = len(img_io.getvalue()) / 1024
                 else:
-                    # Save as JPEG for best compression if there is a background color or original image
+                    # For JPEG, we look for the best quality that fits the target KB
                     if img.mode in ('RGBA', 'LA'):
                         img = img.convert('RGB')
-                    img.save(img_io, format="JPEG", quality=quality)
-                    ext = ".jpg"
-                    mime_type = "image/jpeg"
-                    
+                        
+                    q = 95  # Start with high quality
+                    while q > 5:
+                        img_io = io.BytesIO()
+                        img.save(img_io, format="JPEG", quality=q)
+                        new_size_kb = len(img_io.getvalue()) / 1024
+                        
+                        # If size is under target, we stop!
+                        if new_size_kb <= target_kb:
+                            break
+                        q -= 5  # Reduce quality step by step to shrink size
+                
                 img_io.seek(0)
+                
+                # Display results
+                if new_size_kb > target_kb and ext == ".png":
+                    st.warning(f"⚠️ **{uploaded_file.name}**: PNG transparency format cannot compress below `{target_kb} KB`. Best achieved: `{new_size_kb:.2f} KB`.")
+                else:
+                    st.info(f"📄 **{uploaded_file.name}**:\n* Original Size: `{orig_size_kb:.2f} KB` \n* New Compressed Size: `{new_size_kb:.2f} KB` (Quality Level: {q if ext=='.jpg' else 'PNG'})")
                 
                 processed_images.append({
                     "name": uploaded_file.name.split('.')[0] + "_processed" + ext,
